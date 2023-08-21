@@ -9,6 +9,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -17,9 +18,13 @@ import android.provider.SyncStateContract.Constants
 import android.util.Log
 import android.widget.ArrayAdapter
 import android.widget.ListView
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.datastore.preferences.core.intPreferencesKey
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import java.io.IOException
 import java.io.InputStream
 import java.util.UUID
@@ -32,13 +37,22 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var connectThread: ConnectThread
 
-    private val requiredPermissions = arrayOf(
-        android.Manifest.permission.BLUETOOTH,
-        android.Manifest.permission.ACCESS_FINE_LOCATION,
-        android.Manifest.permission.ACCESS_COARSE_LOCATION,
-        android.Manifest.permission.BLUETOOTH_ADMIN,
-        android.Manifest.permission.BLUETOOTH_CONNECT,
-    )
+    private val requiredPermissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        arrayOf(
+            android.Manifest.permission.BLUETOOTH,
+            android.Manifest.permission.ACCESS_FINE_LOCATION,
+            android.Manifest.permission.ACCESS_COARSE_LOCATION,
+            android.Manifest.permission.BLUETOOTH_CONNECT,
+            android.Manifest.permission.BLUETOOTH_ADMIN,
+        )
+    } else {
+        arrayOf(
+            android.Manifest.permission.BLUETOOTH,
+            android.Manifest.permission.ACCESS_FINE_LOCATION,
+            android.Manifest.permission.ACCESS_COARSE_LOCATION,
+            android.Manifest.permission.BLUETOOTH_ADMIN,
+        )
+    }
 
     val discoveredDevices = mutableListOf<BluetoothDevice>()
     private lateinit var adapter: ArrayAdapter<BluetoothDevice>
@@ -104,6 +118,8 @@ class MainActivity : AppCompatActivity() {
             val deviceName = device.name
             val deviceHardwareAddress = device.address // MAC address
         }
+
+        Log.d("My App" , "Working MainActivity!")
     }
 
     private val receiver = object : BroadcastReceiver() {

@@ -1,5 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">SmartStick</string>
     <string name="this_phone_belongs_to">This Phone Belongs to</string>
     <string name="patient">Patient</string>
     <string name="caretaker">CareTaker</string>
