@@ -4,8 +4,10 @@ import android.content.Context
 import android.content.Intent
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
+import android.text.method.LinkMovementMethod
 import android.util.Log
 import android.widget.Button
+import android.widget.TextView
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.preferencesDataStore
 import androidx.datastore.preferences.core.Preferences
@@ -30,6 +32,11 @@ class Login : AppCompatActivity() {
 
         PatientButton = findViewById(R.id.PatientButton)
         CareTakerButton = findViewById(R.id.CaretakerButton)
+
+
+        val Credit: TextView = findViewById(R.id.Credit)
+        Credit.movementMethod = LinkMovementMethod.getInstance()
+
 
         PatientButton.setOnClickListener {
             PatientLogin()

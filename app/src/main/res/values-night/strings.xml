@@ -4,4 +4,7 @@
     <string name="patient">Patient</string>
     <string name="caretaker">CareTaker</string>
     <string name="connect_your_smart_stick">Connect Your Smart Stick</string>
+    <string name="made_with_by_krish_baidya">
+        Made with ❤️ by <a href="https://github.com/KrishBaidya">Krish Baidya</a>
+    </string>
 </resources>

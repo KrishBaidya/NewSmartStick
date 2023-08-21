@@ -6,41 +6,65 @@
     android:layout_height="match_parent"
     tools:context=".Login">
 
-    <TextView
-        android:id="@+id/textView"
+    <RelativeLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="124dp"
-        android:text="@string/this_phone_belongs_to"
-        android:textAlignment="center"
-        android:textSize="34sp"
+        android:layout_height="match_parent"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintHorizontal_bias="0.0"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+        app:layout_constraintTop_toTopOf="parent">
 
-    <Button
-        android:id="@+id/PatientButton"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="88dp"
-        android:drawableLeft="@drawable/baseline_blind_24"
-        android:text="@string/patient"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintHorizontal_bias="0.498"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/textView" />
+        <TextView
+            android:id="@+id/textView"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="124dp"
+            android:text="@string/this_phone_belongs_to"
+            android:textAlignment="center"
+            android:textSize="34sp" />
 
-    <Button
-        android:id="@+id/CaretakerButton"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:drawableLeft="@drawable/baseline_people_24"
-        android:text="@string/caretaker"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintHorizontal_bias="0.501"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/PatientButton"
-        app:layout_constraintVertical_bias="0.103" />
+        <Button
+            android:id="@+id/PatientButton"
+            android:layout_width="217dp"
+            android:layout_height="wrap_content"
+            android:layout_below="@+id/textView"
+            android:layout_alignParentStart="true"
+            android:layout_alignParentEnd="true"
+            android:layout_marginStart="97dp"
+            android:layout_marginTop="65dp"
+            android:layout_marginEnd="97dp"
+            android:drawableLeft="@drawable/baseline_blind_24"
+            android:text="@string/patient" />
+
+        <Button
+            android:id="@+id/CaretakerButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_below="@+id/PatientButton"
+            android:layout_alignParentStart="true"
+            android:layout_alignParentEnd="true"
+            android:layout_marginStart="98dp"
+            android:layout_marginTop="21dp"
+            android:layout_marginEnd="99dp"
+            android:drawableLeft="@drawable/baseline_people_24"
+            android:text="@string/caretaker" />
+
+        <TextView
+            android:id="@+id/Credit"
+            android:layout_width="wrap_content"
+            android:layout_height="55dp"
+            android:layout_alignParentStart="true"
+            android:layout_alignParentEnd="true"
+            android:layout_alignParentBottom="true"
+            android:layout_marginStart="-2dp"
+            android:layout_marginEnd="2dp"
+            android:layout_marginBottom="1dp"
+            android:autoLink="none"
+            android:linksClickable="true"
+            android:scaleX="1"
+            android:text="@string/made_with_by_krish_baidya"
+            android:textAlignment="center"
+            android:textSize="20sp"
+            tools:text="Made with ❤️ by Krish Baidya" />
+    </RelativeLayout>
+
 </androidx.constraintlayout.widget.ConstraintLayout>
