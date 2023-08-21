@@ -9,22 +9,20 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.media.AudioManager
+import android.media.ToneGenerator
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.Message
-import android.provider.SyncStateContract.Constants
 import android.util.Log
 import android.widget.ArrayAdapter
 import android.widget.ListView
-import androidx.activity.result.contract.ActivityResultContracts
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import androidx.datastore.preferences.core.intPreferencesKey
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.map
 import java.io.IOException
 import java.io.InputStream
 import java.util.UUID
@@ -37,6 +35,10 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var connectThread: ConnectThread
 
+
+    private var toneGenerator: ToneGenerator? = null
+    private lateinit var audioManager: AudioManager
+
     private val requiredPermissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         arrayOf(
             android.Manifest.permission.BLUETOOTH,
@@ -44,6 +46,7 @@ class MainActivity : AppCompatActivity() {
             android.Manifest.permission.ACCESS_COARSE_LOCATION,
             android.Manifest.permission.BLUETOOTH_CONNECT,
             android.Manifest.permission.BLUETOOTH_ADMIN,
+            android.Manifest.permission.BLUETOOTH_SCAN
         )
     } else {
         arrayOf(
@@ -85,6 +88,8 @@ class MainActivity : AppCompatActivity() {
             // The permissions have already been granted
         }
 
+        audioManager = getSystemService(AUDIO_SERVICE) as AudioManager
+        toneGenerator = ToneGenerator(AudioManager.STREAM_MUSIC, ToneGenerator.MAX_VOLUME * 100)
 
         adapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, discoveredDevices)
         val listView = findViewById<ListView>(R.id.ListView)
@@ -146,6 +151,8 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
 
+
+        toneGenerator?.release()
         connectThread.cancel()
         // Don't forget to unregister the ACTION_FOUND receiver.
         unregisterReceiver(receiver)
@@ -160,14 +167,28 @@ class MainActivity : AppCompatActivity() {
         }
 
         public override fun run() {
+
             // Cancel discovery because it otherwise slows down the connection.
             bluetoothAdapter?.cancelDiscovery()
 
             mmSocket?.let { socket ->
                 // Connect to the remote device through the socket. This call blocks
                 // until it succeeds or throws an exception.
+                runOnUiThread(Runnable {
+                    Toast.makeText(
+                        this@MainActivity,
+                        "Connecting!",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                })
                 socket.connect()
-
+                runOnUiThread(Runnable {
+                    Toast.makeText(
+                        this@MainActivity,
+                        "Connected!",
+                        Toast.LENGTH_LONG
+                    ).show()
+                })
                 // The connection attempt succeeded. Perform work associated with
                 // the connection in a separate thread.
                 manageMyConnectedSocket(socket)
@@ -222,6 +243,11 @@ class MainActivity : AppCompatActivity() {
                     var ch = numBytes
                     var aa = mmBuffer.decodeToString(0 , 1)
                     Log.d("MYMYA PAP OSJDOIDO" , aa)
+
+                    //TODO("ToneGenerator and Button Press")
+                    if (aa == "0"){
+                        toneGenerator?.startTone(ToneGenerator.TONE_CDMA_EMERGENCY_RINGBACK, 2000)
+                    }
                 }
             }
 
