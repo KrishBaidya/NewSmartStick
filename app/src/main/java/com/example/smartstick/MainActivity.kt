@@ -244,9 +244,14 @@ class MainActivity : AppCompatActivity() {
                     var aa = mmBuffer.decodeToString(0 , 1)
                     Log.d("MYMYA PAP OSJDOIDO" , aa)
 
-                    //TODO("ToneGenerator and Button Press")
-                    if (aa == "0"){
-                        toneGenerator?.startTone(ToneGenerator.TONE_CDMA_EMERGENCY_RINGBACK, 2000)
+                    /*TODO("ToneGenerator and Button Press")*/
+                    runOnUiThread {
+                        if (aa == "0") {
+                            toneGenerator?.startTone(
+                                ToneGenerator.TONE_CDMA_EMERGENCY_RINGBACK,
+                                2000
+                            )
+                        }
                     }
                 }
             }

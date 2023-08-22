@@ -18,7 +18,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
-val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "IsPatientOrCareTaker")
+val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
 
 val IsPatientOrCareTaker = intPreferencesKey("IsPatientOrCareTaker")
 
