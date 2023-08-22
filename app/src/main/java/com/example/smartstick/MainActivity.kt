@@ -9,6 +9,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.location.LocationManager
 import android.media.AudioManager
 import android.media.ToneGenerator
 import android.os.Build
@@ -23,13 +24,17 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import com.google.android.gms.tasks.Task
+import com.google.firebase.functions.FirebaseFunctions
+import com.google.firebase.functions.ktx.functions
+import com.google.firebase.ktx.Firebase
 import java.io.IOException
 import java.io.InputStream
 import java.util.UUID
 
 
 class MainActivity : AppCompatActivity() {
-
+    private lateinit var functions: FirebaseFunctions
     lateinit var bluetoothManager: BluetoothManager
     lateinit var bluetoothAdapter: BluetoothAdapter
 
@@ -71,6 +76,7 @@ class MainActivity : AppCompatActivity() {
 
         }
     }
+    lateinit var lm : LocationManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -125,6 +131,11 @@ class MainActivity : AppCompatActivity() {
         }
 
         Log.d("My App" , "Working MainActivity!")
+
+
+        lm = getSystemService(LOCATION_SERVICE) as LocationManager
+
+        functions = Firebase.functions
     }
 
     private val receiver = object : BroadcastReceiver() {
@@ -157,7 +168,32 @@ class MainActivity : AppCompatActivity() {
         // Don't forget to unregister the ACTION_FOUND receiver.
         unregisterReceiver(receiver)
     }
+    private fun addMessage(text: String , latitude: String): Task<String> {
+        // Create the arguments to the callable function.
+        val data = hashMapOf(
+            "longitude" to text.toString(),
+            "latitude" to latitude.toString(),
+            "push" to true
+        )
 
+
+        Toast.makeText(
+            this@MainActivity,
+            "Longitude : ${text.toString()}\n Latitude: ${latitude.toString()}",
+            Toast.LENGTH_LONG
+        ).show()
+
+        return functions
+            .getHttpsCallable("sendNotification")
+            .call(data)
+            .continueWith { task ->
+                // This continuation runs on either success or failure, but if the task
+                // has failed then result will throw an Exception which will be
+                // propagated down.
+                val result = task.result?.data as String
+                result
+            }
+    }
 
     inner class ConnectThread(device: BluetoothDevice) : Thread() {
 
@@ -251,6 +287,13 @@ class MainActivity : AppCompatActivity() {
                                 ToneGenerator.TONE_CDMA_EMERGENCY_RINGBACK,
                                 2000
                             )
+                        }
+                        else if(aa == "2"){
+                            val location = lm.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+                            val longitude = location?.longitude
+                            val latitude = location?.latitude
+
+                            addMessage(longitude.toString() , latitude.toString())
                         }
                     }
                 }

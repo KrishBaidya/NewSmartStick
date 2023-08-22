@@ -45,6 +45,8 @@ class Login : AppCompatActivity() {
         }
         CareTakerButton.setOnClickListener {
             CareTakerLogin()
+            val intent = Intent(this, CareTaker::class.java)
+            startActivity(intent)
         }
 
         getLogin()
@@ -53,6 +55,10 @@ class Login : AppCompatActivity() {
 
         if (flowData == 1){
             val intent = Intent(this, MainActivity::class.java)
+            startActivity(intent)
+        }
+        else if (flowData == 2){
+            val intent = Intent(this, CareTaker::class.java)
             startActivity(intent)
         }
     }
