@@ -5,6 +5,7 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.media.RingtoneManager
 import android.net.Uri
 import android.util.Log
 import androidx.core.app.NotificationCompat
@@ -55,7 +56,7 @@ class MessagingService : FirebaseMessagingService() {
 
         // Check if message contains a notification payload.
         if(remoteMessage.data.isNotEmpty()){
-            var notificationBuilder = NotificationCompat.Builder(this, "CHANNEL_ID")
+            var notificationBuilder = NotificationCompat.Builder(this, "0")
             .setContentTitle("My notification title")
                 .setContentText("This is my notification")
                 .setSmallIcon(R.drawable.sym_def_app_icon)
@@ -63,19 +64,25 @@ class MessagingService : FirebaseMessagingService() {
 
             var notificationManager =
             getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager;
-            var longitude = remoteMessage.data["longitude"]
-            var latitude = remoteMessage.data["latitude"]
-            val gmmIntentUri = Uri.parse("geo:${longitude},${latitude}")
-            val mapIntent = Intent(Intent.ACTION_VIEW, gmmIntentUri)
-            mapIntent.setPackage("com.google.android.apps.maps")
-            mapIntent.resolveActivity(packageManager)?.let {
-                startActivity(mapIntent)
-            }
-
-            val pendingIntent = PendingIntent.getActivity(this, 0, mapIntent, PendingIntent.FLAG_UPDATE_CURRENT);
-
-            notificationBuilder.addAction(R.drawable.sym_def_app_icon, "Open app", pendingIntent)
             notificationManager.notify(0, notificationBuilder.build());
+        }
+
+        remoteMessage.notification?.let {
+            Log.d("TAG", "Message Notification Body: ${it.body}")
+
+            var notificationBuilder = NotificationCompat.Builder(this, "channel_id")
+                .setContentTitle(it.title)
+                .setContentText(it.body)
+                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                .setStyle(NotificationCompat.BigTextStyle())
+                .setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))
+                .setSmallIcon(R.mipmap.sym_def_app_icon)
+                .setAutoCancel(true);
+            Log.d("Tag" , it.title.toString())
+            var notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager;
+
+            notificationManager.notify(0, notificationBuilder.build());
+
         }
         // Also if you intend on generating your own notifications as a result of a received FCM
         // message, here is where that should be initiated. See sendNotification method below.

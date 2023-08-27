@@ -9,6 +9,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.location.Location
 import android.location.LocationManager
 import android.media.AudioManager
 import android.media.ToneGenerator
@@ -63,7 +64,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     val discoveredDevices = mutableListOf<BluetoothDevice>()
-    private lateinit var adapter: ArrayAdapter<BluetoothDevice>
+
+    private val deviceList = HashSet<String>()
+    private lateinit var adapter: ArrayAdapter<String>
 
     var handler = object :Handler(Looper.getMainLooper()){
         override fun handleMessage(msg: Message) {
@@ -77,6 +80,13 @@ class MainActivity : AppCompatActivity() {
         }
     }
     lateinit var lm : LocationManager
+
+    lateinit var a: MutableList<String>
+
+
+    var latitude : String = ""
+    var longitude : String = ""
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -97,7 +107,7 @@ class MainActivity : AppCompatActivity() {
         audioManager = getSystemService(AUDIO_SERVICE) as AudioManager
         toneGenerator = ToneGenerator(AudioManager.STREAM_MUSIC, ToneGenerator.MAX_VOLUME * 100)
 
-        adapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, discoveredDevices)
+        adapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, mutableListOf<String>())
         val listView = findViewById<ListView>(R.id.ListView)
         listView.adapter = adapter
 
@@ -133,9 +143,10 @@ class MainActivity : AppCompatActivity() {
         Log.d("My App" , "Working MainActivity!")
 
 
-        lm = getSystemService(LOCATION_SERVICE) as LocationManager
-
         functions = Firebase.functions
+
+        lm = getSystemService(LOCATION_SERVICE) as LocationManager
+        a = lm.getProviders(true)
     }
 
     private val receiver = object : BroadcastReceiver() {
@@ -144,16 +155,18 @@ class MainActivity : AppCompatActivity() {
             val action: String? = intent.action
             when(action) {
                 BluetoothDevice.ACTION_FOUND -> {
-                    // Discovery has found a device. Get the BluetoothDevice
-                    // object and its info from the Intent.
-                    val device: BluetoothDevice? =
-                        intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
-                    val deviceName = device!!.name
-                    val deviceHardwareAddress = device!!.address // MAC address
-                    Log.d("My app" , deviceName)
+                    val device =
+                        intent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
+                    device?.let {
+                        if (deviceList.add(it.address)) {
+                            // The device is not in the list, add it to the list
+                            discoveredDevices.add(it)
+                            Log.d("My app", "Found device: ${it.name ?: "Unnamed Device"}")
 
-                    discoveredDevices.add(device)
-                    adapter.notifyDataSetChanged()
+                            adapter.add(it.name ?: "Unnamed Device")
+                            adapter.notifyDataSetChanged()
+                        }
+                    }
                 }
             }
         }
@@ -168,20 +181,13 @@ class MainActivity : AppCompatActivity() {
         // Don't forget to unregister the ACTION_FOUND receiver.
         unregisterReceiver(receiver)
     }
-    private fun addMessage(text: String , latitude: String): Task<String> {
+    private fun addMessage(text: String): Task<String> {
         // Create the arguments to the callable function.
         val data = hashMapOf(
-            "longitude" to text.toString(),
-            "latitude" to latitude.toString(),
+            "text" to text,
             "push" to true
         )
-
-
-        Toast.makeText(
-            this@MainActivity,
-            "Longitude : ${text.toString()}\n Latitude: ${latitude.toString()}",
-            Toast.LENGTH_LONG
-        ).show()
+        Log.d("Tag" , text)
 
         return functions
             .getHttpsCallable("sendNotification")
@@ -287,13 +293,8 @@ class MainActivity : AppCompatActivity() {
                                 ToneGenerator.TONE_CDMA_EMERGENCY_RINGBACK,
                                 2000
                             )
-                        }
-                        else if(aa == "2"){
-                            val location = lm.getLastKnownLocation(LocationManager.GPS_PROVIDER)
-                            val longitude = location?.longitude
-                            val latitude = location?.latitude
 
-                            addMessage(longitude.toString() , latitude.toString())
+                            addMessage("Patient needs help")
                         }
                     }
                 }
