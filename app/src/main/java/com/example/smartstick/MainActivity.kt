@@ -1,5 +1,6 @@
 package com.example.smartstick
 
+import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
@@ -10,6 +11,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.location.Location
+import android.location.LocationListener
 import android.location.LocationManager
 import android.media.AudioManager
 import android.media.ToneGenerator
@@ -25,6 +27,11 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.location.LocationCallback
+import com.google.android.gms.location.LocationRequest
+import com.google.android.gms.location.LocationResult
+import com.google.android.gms.location.LocationServices
 import com.google.android.gms.tasks.Task
 import com.google.firebase.functions.FirebaseFunctions
 import com.google.firebase.functions.ktx.functions
@@ -44,6 +51,9 @@ class MainActivity : AppCompatActivity() {
 
     private var toneGenerator: ToneGenerator? = null
     private lateinit var audioManager: AudioManager
+
+
+    private lateinit var fusedLocationProviderClient: FusedLocationProviderClient
 
     private val requiredPermissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         arrayOf(
@@ -84,8 +94,10 @@ class MainActivity : AppCompatActivity() {
     lateinit var a: MutableList<String>
 
 
-    var latitude : String = ""
-    var longitude : String = ""
+    var latitude : Double = 0.0
+    var longitude : Double = 0.0
+
+    lateinit var location : Location
 
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -128,8 +140,8 @@ class MainActivity : AppCompatActivity() {
                 var REQUEST_ENABLE_BT: Int = 0
                 startActivityForResult(enableBtIntent, REQUEST_ENABLE_BT)
             }
-            bluetoothAdapter.startDiscovery();
         }
+        bluetoothAdapter.startDiscovery();
 
         val filter = IntentFilter(BluetoothDevice.ACTION_FOUND)
         registerReceiver(receiver, filter)
@@ -147,6 +159,10 @@ class MainActivity : AppCompatActivity() {
 
         lm = getSystemService(LOCATION_SERVICE) as LocationManager
         a = lm.getProviders(true)
+
+
+        var locationservice = this.LocationThread()
+        locationservice.start()
     }
 
     private val receiver = object : BroadcastReceiver() {
@@ -181,13 +197,47 @@ class MainActivity : AppCompatActivity() {
         // Don't forget to unregister the ACTION_FOUND receiver.
         unregisterReceiver(receiver)
     }
-    private fun addMessage(text: String): Task<String> {
+
+
+    inner class LocationThread() : Thread() {
+        override fun start() {
+            // Get a reference to the FusedLocationProviderClient.
+            fusedLocationProviderClient = LocationServices.getFusedLocationProviderClient(this@MainActivity)
+
+            // Create a LocationRequest object.
+            val locationRequest = LocationRequest.create()
+            locationRequest.priority = LocationRequest.PRIORITY_HIGH_ACCURACY
+            locationRequest.interval = 10000
+            locationRequest.fastestInterval = 5000
+
+            // Create a LocationCallbackCompat object.
+            val locationCallbackCompat = object : LocationCallback(){
+                override fun onLocationResult(locationResult: LocationResult) {
+                    location = locationResult.lastLocation!!
+
+                    longitude = location.longitude
+                    latitude = location.latitude
+                }
+            }
+
+
+            // Request location updates.
+            fusedLocationProviderClient.requestLocationUpdates(
+                locationRequest,
+                locationCallbackCompat,
+                Looper.getMainLooper()
+            )
+        }
+    }
+
+    private fun addMessage(text: HashMap<String , Double>): Task<String> {
         // Create the arguments to the callable function.
         val data = hashMapOf(
             "text" to text,
             "push" to true
         )
-        Log.d("Tag" , text)
+        Log.d("longitude" , text["longitude"].toString())
+        Log.d("longitude" , text["latitude"].toString())
 
         return functions
             .getHttpsCallable("sendNotification")
@@ -262,6 +312,7 @@ class MainActivity : AppCompatActivity() {
             private val mmBuffer: ByteArray = ByteArray(1024) // mmBuffer store for the stream
 
             override fun run() {
+
                 var numBytes: Int // bytes returned from read()
 
                 // Keep listening to the InputStream until an exception occurs.
@@ -293,14 +344,20 @@ class MainActivity : AppCompatActivity() {
                                 ToneGenerator.TONE_CDMA_EMERGENCY_RINGBACK,
                                 2000
                             )
+                        }
+                        else if (aa == "2"){
 
-                            addMessage("Patient needs help")
+                            val locate = hashMapOf(
+                                "longitude" to longitude,
+                                "latitude" to latitude
+                            )
+
+                            addMessage(locate)
                         }
                     }
                 }
             }
-
-            // Call this method from the main activity to shut down the connection.
+                // Call this method from the main activity to shut down the connection.
             fun cancel() {
                 try {
                     mmSocket.close()

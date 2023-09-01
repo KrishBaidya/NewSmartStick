@@ -1,14 +1,17 @@
 package com.example.smartstick
 
-import android.R
+import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.media.RingtoneManager
 import android.net.Uri
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import com.google.android.gms.maps.GoogleMap
+import com.google.android.gms.maps.OnMapReadyCallback
+import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.maps.model.MarkerOptions
 import com.google.firebase.database.ktx.database
 import com.google.firebase.ktx.Firebase
 import com.google.firebase.messaging.FirebaseMessaging
@@ -17,8 +20,9 @@ import com.google.firebase.messaging.RemoteMessage
 
 
 class MessagingService : FirebaseMessagingService() {
-
+    private var mMap: GoogleMap? = null
     val database = Firebase.database
+
     override fun onCreate() {
         super.onCreate()
 
@@ -42,47 +46,50 @@ class MessagingService : FirebaseMessagingService() {
         Log.d("my app" , token)
     }
 
+    private fun openMaps(context: Context, longitude : String, latitude : String): Intent {
+        val mapIntent: Intent = Intent(Intent.ACTION_VIEW,
+            Uri.parse("geo:${latitude},${longitude}?q=${latitude},${longitude}")
+        )
+        return mapIntent
+    }
+
+
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
         // ...
+
+        Log.d("Hello" , remoteMessage.notification.toString())
+
+        val name = "R.string.channel_name"
+        val descriptionText = "R.string.channel_description"
+        val importance = NotificationManager.IMPORTANCE_DEFAULT
+        val mChannel = NotificationChannel("CHANNEL_ID", name, importance)
+        mChannel.description = descriptionText
+        val notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+        notificationManager.createNotificationChannel(mChannel)
 
         // TODO(developer): Handle FCM messages here.
         // Not getting messages here? See why this may be: https://goo.gl/39bRNJ
         Log.d("TAG", "From: ${remoteMessage.from}")
+        Log.d("TAG", "Message data payload: ${remoteMessage.data}")
 
         // Check if message contains a data payload.
         if (remoteMessage.data.isNotEmpty()) {
             Log.d("TAG", "Message data payload: ${remoteMessage.data}")
-        }
 
-        // Check if message contains a notification payload.
-        if(remoteMessage.data.isNotEmpty()){
-            var notificationBuilder = NotificationCompat.Builder(this, "0")
-            .setContentTitle("My notification title")
-                .setContentText("This is my notification")
-                .setSmallIcon(R.drawable.sym_def_app_icon)
-                .setPriority(NotificationCompat.PRIORITY_DEFAULT);
+            // Create a PendingIntent
+            val pendingIntent = PendingIntent.getActivity(this, 0, openMaps(this , remoteMessage.data["longitude"]!! , remoteMessage.data["latitude"]!!),
+                PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE)
 
-            var notificationManager =
-            getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager;
-            notificationManager.notify(0, notificationBuilder.build());
-        }
+            val notificationBuilder = NotificationCompat.Builder(this, "CHANNEL_ID")
+                .setContentTitle("Patient needs help")
+                .setContentText("Patient needs help")
+                .setSmallIcon(com.example.smartstick.R.drawable.ic_launcher_foreground)
+                .setAutoCancel(true)
+                .setContentIntent(pendingIntent)
 
-        remoteMessage.notification?.let {
-            Log.d("TAG", "Message Notification Body: ${it.body}")
-
-            var notificationBuilder = NotificationCompat.Builder(this, "channel_id")
-                .setContentTitle(it.title)
-                .setContentText(it.body)
-                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-                .setStyle(NotificationCompat.BigTextStyle())
-                .setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))
-                .setSmallIcon(R.mipmap.sym_def_app_icon)
-                .setAutoCancel(true);
-            Log.d("Tag" , it.title.toString())
-            var notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager;
-
-            notificationManager.notify(0, notificationBuilder.build());
-
+            // Send the notification
+            val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+            nm.notify(0, notificationBuilder.build())
         }
         // Also if you intend on generating your own notifications as a result of a received FCM
         // message, here is where that should be initiated. See sendNotification method below.
