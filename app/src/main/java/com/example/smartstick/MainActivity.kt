@@ -33,12 +33,14 @@ import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.tasks.Task
+import com.google.firebase.database.ktx.database
 import com.google.firebase.functions.FirebaseFunctions
 import com.google.firebase.functions.ktx.functions
 import com.google.firebase.ktx.Firebase
 import java.io.IOException
 import java.io.InputStream
 import java.util.UUID
+import kotlin.random.Random
 
 
 class MainActivity : AppCompatActivity() {
@@ -99,6 +101,8 @@ class MainActivity : AppCompatActivity() {
 
     lateinit var location : Location
 
+    val database = Firebase.database
+    val myRef = database.getReference("coord")
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -238,6 +242,16 @@ class MainActivity : AppCompatActivity() {
         )
         Log.d("longitude" , text["longitude"].toString())
         Log.d("longitude" , text["latitude"].toString())
+
+        var randomvalue = Random.nextLong(Long.MAX_VALUE)
+        var coord = hashMapOf<String, Any?>(
+            "clicked" to randomvalue,
+            "lat" to text["latitude"],
+            "long" to text["longitude"]
+        )
+        myRef.setValue(coord)
+
+        Log.d("DOne!" , coord["clicked"].toString())
 
         return functions
             .getHttpsCallable("sendNotification")

@@ -12,7 +12,11 @@ import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.OnMapReadyCallback
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.MarkerOptions
+import com.google.firebase.database.DataSnapshot
+import com.google.firebase.database.DatabaseError
+import com.google.firebase.database.ValueEventListener
 import com.google.firebase.database.ktx.database
+import com.google.firebase.database.ktx.getValue
 import com.google.firebase.ktx.Firebase
 import com.google.firebase.messaging.FirebaseMessaging
 import com.google.firebase.messaging.FirebaseMessagingService
@@ -27,6 +31,27 @@ class MessagingService : FirebaseMessagingService() {
         super.onCreate()
 
         Log.d("my app" , "HISHIHSI")
+
+        // Write a message to the database
+        val database = Firebase.database
+        val myRef = database.getReference("coord")
+
+        myRef.addValueEventListener(object: ValueEventListener {
+
+            override fun onDataChange(snapshot: DataSnapshot) {
+                // This method is called once with the initial value and again
+                // whenever data at this location is updated.
+                val value = snapshot.getValue<HashMap<String, Any?>>()
+                Log.d("TAG", "Value is: $value")
+
+                MessageRecievedFromDB(value?.get("lat") as Double?, value?.get("long") as Double?)
+            }
+
+            override fun onCancelled(error: DatabaseError) {
+                Log.w("TAG", "Failed to read value.", error.toException())
+            }
+
+        })
 
         val firebaseMessaging = FirebaseMessaging.getInstance()
         firebaseMessaging.token.addOnCompleteListener { task ->
@@ -53,6 +78,35 @@ class MessagingService : FirebaseMessagingService() {
         return mapIntent
     }
 
+    fun MessageRecievedFromDB(lat: Double?, long: Double?){
+        val name = "R.string.channel_name"
+        val descriptionText = "R.string.channel_description"
+        val importance = NotificationManager.IMPORTANCE_DEFAULT
+        val mChannel = NotificationChannel("CHANNEL_ID", name, importance)
+        mChannel.description = descriptionText
+        val notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+        notificationManager.createNotificationChannel(mChannel)
+
+        // Check if message contains a data payload.
+        if ((lat != null) && (long != null)) {
+            Log.d("TAG", "Message data payload: ${long}, $lat")
+
+            // Create a PendingIntent
+            val pendingIntent = PendingIntent.getActivity(this, 0, openMaps(this , long.toString(), lat.toString()),
+                PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE)
+
+            val notificationBuilder = NotificationCompat.Builder(this, "CHANNEL_ID")
+                .setContentTitle("Patient needs help")
+                .setContentText("Patient needs help")
+                .setSmallIcon(com.example.smartstick.R.drawable.ic_launcher_foreground)
+                .setAutoCancel(true)
+                .setContentIntent(pendingIntent)
+
+            // Send the notification
+            val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+            nm.notify(0, notificationBuilder.build())
+        }
+    }
 
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
         // ...
