@@ -1,25 +1,15 @@
 package com.example.smartstick
 
 import android.annotation.SuppressLint
-import android.bluetooth.BluetoothAdapter
-import android.bluetooth.BluetoothDevice
-import android.bluetooth.BluetoothManager
-import android.bluetooth.BluetoothSocket
-import android.content.BroadcastReceiver
-import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
+import android.bluetooth.*
+import android.content.*
 import android.content.pm.PackageManager
 import android.location.Location
-import android.location.LocationListener
-import android.location.LocationManager
 import android.media.AudioManager
 import android.media.ToneGenerator
 import android.os.Build
 import android.os.Bundle
-import android.os.Handler
 import android.os.Looper
-import android.os.Message
 import android.util.Log
 import android.widget.ArrayAdapter
 import android.widget.ListView
@@ -27,357 +17,408 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import com.google.android.gms.location.FusedLocationProviderClient
-import com.google.android.gms.location.LocationCallback
-import com.google.android.gms.location.LocationRequest
-import com.google.android.gms.location.LocationResult
-import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.*
 import com.google.android.gms.tasks.Task
 import com.google.firebase.database.ktx.database
 import com.google.firebase.functions.FirebaseFunctions
 import com.google.firebase.functions.ktx.functions
 import com.google.firebase.ktx.Firebase
 import java.io.IOException
-import java.io.InputStream
 import java.util.UUID
 import kotlin.random.Random
 
-
 class MainActivity : AppCompatActivity() {
+
+    // Firebase
     private lateinit var functions: FirebaseFunctions
-    lateinit var bluetoothManager: BluetoothManager
-    lateinit var bluetoothAdapter: BluetoothAdapter
+    private val database = Firebase.database
+    private val coordRef = database.getReference("coord")
 
-    private lateinit var connectThread: ConnectThread
+    // Bluetooth
+    private lateinit var bluetoothManager: BluetoothManager
+    private lateinit var bluetoothAdapter: BluetoothAdapter
+    private var connectThread: ConnectThread? = null
+    private val discoveredDevices = mutableListOf<BluetoothDevice>()
+    private val deviceAddresses = HashSet<String>()
 
-
+    // Audio
     private var toneGenerator: ToneGenerator? = null
-    private lateinit var audioManager: AudioManager
 
+    // Location
+    private lateinit var fusedLocationClient: FusedLocationProviderClient
+    private var currentLatitude: Double = 0.0
+    private var currentLongitude: Double = 0.0
 
-    private lateinit var fusedLocationProviderClient: FusedLocationProviderClient
+    // UI
+    private lateinit var deviceAdapter: ArrayAdapter<String>
 
-    private val requiredPermissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-        arrayOf(
-            android.Manifest.permission.BLUETOOTH,
-            android.Manifest.permission.ACCESS_FINE_LOCATION,
-            android.Manifest.permission.ACCESS_COARSE_LOCATION,
-            android.Manifest.permission.BLUETOOTH_CONNECT,
-            android.Manifest.permission.BLUETOOTH_ADMIN,
-            android.Manifest.permission.BLUETOOTH_SCAN
-        )
-    } else {
-        arrayOf(
-            android.Manifest.permission.BLUETOOTH,
-            android.Manifest.permission.ACCESS_FINE_LOCATION,
-            android.Manifest.permission.ACCESS_COARSE_LOCATION,
-            android.Manifest.permission.BLUETOOTH_ADMIN,
-        )
+    // Constants
+    companion object {
+        private const val TAG = "SmartStick"
+        private const val PERMISSION_REQUEST_CODE = 100
+        private const val REQUEST_ENABLE_BT = 1
+        private const val SPP_UUID = "00001101-0000-1000-8000-00805F9B34FB"
+        private const val TONE_DURATION_MS = 2000
+        private const val LOCATION_UPDATE_INTERVAL = 10000L
+        private const val LOCATION_FASTEST_INTERVAL = 5000L
+
+        private const val COMMAND_PLAY_TONE = "0"
+        private const val COMMAND_SEND_LOCATION = "2"
     }
-
-    val discoveredDevices = mutableListOf<BluetoothDevice>()
-
-    private val deviceList = HashSet<String>()
-    private lateinit var adapter: ArrayAdapter<String>
-
-    var handler = object :Handler(Looper.getMainLooper()){
-        override fun handleMessage(msg: Message) {
-            super.handleMessage(msg)
-
-
-            val data = msg.data
-            var numBytes = data.getInt("numBytes")
-            var bytearray = data.getByteArray("ByteArray")
-
-        }
-    }
-    lateinit var lm : LocationManager
-
-    lateinit var a: MutableList<String>
-
-
-    var latitude : Double = 0.0
-    var longitude : Double = 0.0
-
-    lateinit var location : Location
-
-    val database = Firebase.database
-    val myRef = database.getReference("coord")
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.BLUETOOTH) != PackageManager.PERMISSION_GRANTED
-            || ContextCompat.checkSelfPermission(this,android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
-            || ContextCompat.checkSelfPermission(this,android.Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED
-            || ContextCompat.checkSelfPermission(this,android.Manifest.permission.BLUETOOTH_ADMIN) != PackageManager.PERMISSION_GRANTED
-            || ContextCompat.checkSelfPermission(this,android.Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED
-            ) {
-            // Request the permissions
-            ActivityCompat.requestPermissions(this, requiredPermissions , 0);
-        } else {
-            // The permissions have already been granted
-        }
-
-        audioManager = getSystemService(AUDIO_SERVICE) as AudioManager
-        toneGenerator = ToneGenerator(AudioManager.STREAM_MUSIC, ToneGenerator.MAX_VOLUME * 100)
-
-        adapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, mutableListOf<String>())
-        val listView = findViewById<ListView>(R.id.ListView)
-        listView.adapter = adapter
-
-        listView.setOnItemClickListener { parent, view, position, id ->
-            val device = discoveredDevices[position]
-            connectThread = ConnectThread(device)
-            connectThread.start()
-        }
-
-        bluetoothManager = getSystemService(BluetoothManager::class.java)
-        bluetoothAdapter = bluetoothManager.getAdapter()
-        if (bluetoothAdapter == null) {
-            Log.d("My app" , "This device does not support Bluetooth")
-        }
-        else{
-            if (!bluetoothAdapter.isEnabled) {
-                val enableBtIntent = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
-                var REQUEST_ENABLE_BT: Int = 0
-                startActivityForResult(enableBtIntent, REQUEST_ENABLE_BT)
-            }
-        }
-        bluetoothAdapter.startDiscovery();
-
-        val filter = IntentFilter(BluetoothDevice.ACTION_FOUND)
-        registerReceiver(receiver, filter)
-
-        val pairedDevices: Set<BluetoothDevice>? = bluetoothAdapter?.bondedDevices
-        pairedDevices?.forEach { device ->
-            val deviceName = device.name
-            val deviceHardwareAddress = device.address // MAC address
-        }
-
-        Log.d("My App" , "Working MainActivity!")
-
-
-        functions = Firebase.functions
-
-        lm = getSystemService(LOCATION_SERVICE) as LocationManager
-        a = lm.getProviders(true)
-
-
-        var locationservice = this.LocationThread()
-        locationservice.start()
+        initializeComponents()
+        checkAndRequestPermissions()
+        setupBluetooth()
+        setupLocationTracking()
     }
 
-    private val receiver = object : BroadcastReceiver() {
+    private fun initializeComponents() {
+        // Firebase
+        functions = Firebase.functions
 
+        // Audio
+        toneGenerator = ToneGenerator(AudioManager.STREAM_MUSIC, ToneGenerator.MAX_VOLUME)
+
+        // UI - ListView for discovered devices
+        deviceAdapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, mutableListOf())
+        findViewById<ListView>(R.id.ListView).apply {
+            adapter = deviceAdapter
+            setOnItemClickListener { _, _, position, _ ->
+                connectToDevice(discoveredDevices[position])
+            }
+        }
+
+        // Location
+        fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
+    }
+
+    private fun checkAndRequestPermissions() {
+        val permissionsToRequest = mutableListOf<String>()
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            if (!hasPermission(android.Manifest.permission.BLUETOOTH_SCAN)) {
+                permissionsToRequest.add(android.Manifest.permission.BLUETOOTH_SCAN)
+            }
+            if (!hasPermission(android.Manifest.permission.BLUETOOTH_CONNECT)) {
+                permissionsToRequest.add(android.Manifest.permission.BLUETOOTH_CONNECT)
+            }
+        }
+
+        if (!hasPermission(android.Manifest.permission.ACCESS_FINE_LOCATION)) {
+            permissionsToRequest.add(android.Manifest.permission.ACCESS_FINE_LOCATION)
+        }
+        if (!hasPermission(android.Manifest.permission.ACCESS_COARSE_LOCATION)) {
+            permissionsToRequest.add(android.Manifest.permission.ACCESS_COARSE_LOCATION)
+        }
+
+        if (permissionsToRequest.isNotEmpty()) {
+            ActivityCompat.requestPermissions(
+                this, permissionsToRequest.toTypedArray(), PERMISSION_REQUEST_CODE
+            )
+        }
+    }
+
+    private fun hasPermission(permission: String): Boolean {
+        return ContextCompat.checkSelfPermission(
+            this, permission
+        ) == PackageManager.PERMISSION_GRANTED
+    }
+
+    private fun setupBluetooth() {
+        bluetoothManager = getSystemService(BluetoothManager::class.java)
+        bluetoothAdapter = bluetoothManager.adapter
+
+        if (!::bluetoothAdapter.isInitialized) {
+            Log.e(TAG, "Bluetooth not supported on this device")
+            Toast.makeText(this, "Bluetooth not supported", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        // Check if we have the necessary permissions
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            if (!hasPermission(android.Manifest.permission.BLUETOOTH_CONNECT)) {
+                Log.w(TAG, "Missing BLUETOOTH_CONNECT permission")
+                return
+            }
+        }
+
+        if (!bluetoothAdapter.isEnabled) {
+            requestEnableBluetooth()
+            return
+        }
+
+        startBluetoothDiscovery()
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun requestEnableBluetooth() {
+        val enableBtIntent = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
+        startActivityForResult(enableBtIntent, REQUEST_ENABLE_BT)
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun startBluetoothDiscovery() {
+        // Check permissions before starting discovery
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            if (!hasPermission(android.Manifest.permission.BLUETOOTH_SCAN)) {
+                Log.e(TAG, "Missing BLUETOOTH_SCAN permission")
+                Toast.makeText(this, "Bluetooth scan permission required", Toast.LENGTH_SHORT)
+                    .show()
+                return
+            }
+        }
+
+        // Register receiver for device discovery
+        val filter = IntentFilter(BluetoothDevice.ACTION_FOUND)
+        registerReceiver(bluetoothReceiver, filter)
+
+        // Start discovery
+        val discoveryStarted = bluetoothAdapter.startDiscovery()
+        if (discoveryStarted) {
+            Log.d(TAG, "Bluetooth discovery started successfully")
+            Toast.makeText(this, "Scanning for devices...", Toast.LENGTH_SHORT).show()
+        } else {
+            Log.e(TAG, "Failed to start Bluetooth discovery")
+            Toast.makeText(this, "Failed to start scanning", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private val bluetoothReceiver = object : BroadcastReceiver() {
+        @SuppressLint("MissingPermission")
         override fun onReceive(context: Context, intent: Intent) {
-            val action: String? = intent.action
-            when(action) {
+            when (intent.action) {
                 BluetoothDevice.ACTION_FOUND -> {
                     val device =
                         intent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
                     device?.let {
-                        if (deviceList.add(it.address)) {
-                            // The device is not in the list, add it to the list
+                        if (deviceAddresses.add(it.address)) {
                             discoveredDevices.add(it)
-                            Log.d("My app", "Found device: ${it.name ?: "Unnamed Device"}")
-
-                            adapter.add(it.name ?: "Unnamed Device")
-                            adapter.notifyDataSetChanged()
+                            val deviceName = it.name ?: "Unnamed Device"
+                            Log.d(TAG, "Found device: $deviceName (${it.address})")
+                            deviceAdapter.add(deviceName)
+                            deviceAdapter.notifyDataSetChanged()
                         }
                     }
                 }
+            }
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun connectToDevice(device: BluetoothDevice) {
+        connectThread?.cancel()
+        connectThread = ConnectThread(device)
+        connectThread?.start()
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun setupLocationTracking() {
+        val locationRequest = LocationRequest.create().apply {
+            priority = LocationRequest.PRIORITY_HIGH_ACCURACY
+            interval = LOCATION_UPDATE_INTERVAL
+            fastestInterval = LOCATION_FASTEST_INTERVAL
+        }
+
+        val locationCallback = object : LocationCallback() {
+            override fun onLocationResult(result: LocationResult) {
+                result.lastLocation?.let { location ->
+                    currentLatitude = location.latitude
+                    currentLongitude = location.longitude
+                    Log.d(TAG, "Location updated: $currentLatitude, $currentLongitude")
+                }
+            }
+        }
+
+        fusedLocationClient.requestLocationUpdates(
+            locationRequest, locationCallback, Looper.getMainLooper()
+        )
+    }
+
+    private fun sendLocationToFirebase() {
+        val locationData = hashMapOf(
+            "longitude" to currentLongitude, "latitude" to currentLatitude
+        )
+
+        val randomId = Random.nextLong(Long.MAX_VALUE)
+        val coordData = hashMapOf<String, Any?>(
+            "clicked" to randomId, "lat" to currentLatitude, "long" to currentLongitude
+        )
+
+        coordRef.setValue(coordData).addOnSuccessListener {
+                Log.d(TAG, "Location saved to Firebase: $coordData")
+            }.addOnFailureListener { e ->
+                Log.e(TAG, "Failed to save location", e)
+            }
+
+        sendNotification(locationData)
+    }
+
+    private fun sendNotification(location: HashMap<String, Double>): Task<String> {
+        val data = hashMapOf(
+            "text" to location, "push" to true
+        )
+
+        return functions.getHttpsCallable("sendNotification").call(data).continueWith { task ->
+                val result = task.result?.data as? String ?: ""
+                Log.d(TAG, "Notification sent: $result")
+                result
+            }
+    }
+
+    private fun playTone() {
+        toneGenerator?.startTone(ToneGenerator.TONE_CDMA_EMERGENCY_RINGBACK, TONE_DURATION_MS)
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int, permissions: Array<out String>, grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+
+        if (requestCode == PERMISSION_REQUEST_CODE) {
+            val allGranted = grantResults.all { it == PackageManager.PERMISSION_GRANTED }
+
+            if (allGranted) {
+                Log.d(TAG, "All permissions granted")
+                setupBluetooth()
+                setupLocationTracking()
+            } else {
+                Log.w(TAG, "Some permissions were denied")
+                Toast.makeText(this, "Permissions required for app to function", Toast.LENGTH_LONG)
+                    .show()
+            }
+        }
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+
+        if (requestCode == REQUEST_ENABLE_BT) {
+            if (resultCode == RESULT_OK) {
+                Log.d(TAG, "Bluetooth enabled")
+                startBluetoothDiscovery()
+            } else {
+                Log.w(TAG, "Bluetooth enable request denied")
+                Toast.makeText(this, "Bluetooth is required", Toast.LENGTH_SHORT).show()
             }
         }
     }
 
     override fun onDestroy() {
         super.onDestroy()
-
-
         toneGenerator?.release()
-        connectThread.cancel()
-        // Don't forget to unregister the ACTION_FOUND receiver.
-        unregisterReceiver(receiver)
-    }
-
-
-    inner class LocationThread() : Thread() {
-        override fun start() {
-            // Get a reference to the FusedLocationProviderClient.
-            fusedLocationProviderClient = LocationServices.getFusedLocationProviderClient(this@MainActivity)
-
-            // Create a LocationRequest object.
-            val locationRequest = LocationRequest.create()
-            locationRequest.priority = LocationRequest.PRIORITY_HIGH_ACCURACY
-            locationRequest.interval = 10000
-            locationRequest.fastestInterval = 5000
-
-            // Create a LocationCallbackCompat object.
-            val locationCallbackCompat = object : LocationCallback(){
-                override fun onLocationResult(locationResult: LocationResult) {
-                    location = locationResult.lastLocation!!
-
-                    longitude = location.longitude
-                    latitude = location.latitude
-                }
-            }
-
-
-            // Request location updates.
-            fusedLocationProviderClient.requestLocationUpdates(
-                locationRequest,
-                locationCallbackCompat,
-                Looper.getMainLooper()
-            )
+        connectThread?.cancel()
+        try {
+            unregisterReceiver(bluetoothReceiver)
+        } catch (e: IllegalArgumentException) {
+            Log.w(TAG, "Receiver not registered", e)
         }
     }
 
-    private fun addMessage(text: HashMap<String , Double>): Task<String> {
-        // Create the arguments to the callable function.
-        val data = hashMapOf(
-            "text" to text,
-            "push" to true
-        )
-        Log.d("longitude" , text["longitude"].toString())
-        Log.d("longitude" , text["latitude"].toString())
-
-        var randomvalue = Random.nextLong(Long.MAX_VALUE)
-        var coord = hashMapOf<String, Any?>(
-            "clicked" to randomvalue,
-            "lat" to text["latitude"],
-            "long" to text["longitude"]
-        )
-        myRef.setValue(coord)
-
-        Log.d("DOne!" , coord["clicked"].toString())
-
-        return functions
-            .getHttpsCallable("sendNotification")
-            .call(data)
-            .continueWith { task ->
-                // This continuation runs on either success or failure, but if the task
-                // has failed then result will throw an Exception which will be
-                // propagated down.
-                val result = task.result?.data as String
-                result
-            }
-    }
-
-    inner class ConnectThread(device: BluetoothDevice) : Thread() {
-
-        lateinit var service: ConnectedThread
-        private val mmSocket: BluetoothSocket? by lazy(LazyThreadSafetyMode.NONE) {
-            device.createRfcommSocketToServiceRecord(UUID.fromString("00001101-0000-1000-8000-00805F9B34FB"))
+    // Bluetooth Connection Thread
+    private inner class ConnectThread(private val device: BluetoothDevice) : Thread() {
+        private val socket: BluetoothSocket? by lazy(LazyThreadSafetyMode.NONE) {
+            device.createRfcommSocketToServiceRecord(UUID.fromString(SPP_UUID))
         }
+        private var connectedThread: ConnectedThread? = null
 
-        public override fun run() {
+        @SuppressLint("MissingPermission")
+        override fun run() {
+            bluetoothAdapter.cancelDiscovery()
 
-            // Cancel discovery because it otherwise slows down the connection.
-            bluetoothAdapter?.cancelDiscovery()
-
-            mmSocket?.let { socket ->
-                // Connect to the remote device through the socket. This call blocks
-                // until it succeeds or throws an exception.
-                runOnUiThread(Runnable {
-                    Toast.makeText(
-                        this@MainActivity,
-                        "Connecting!",
-                        Toast.LENGTH_SHORT
-                    ).show()
-                })
-                socket.connect()
-                runOnUiThread(Runnable {
-                    Toast.makeText(
-                        this@MainActivity,
-                        "Connected!",
-                        Toast.LENGTH_LONG
-                    ).show()
-                })
-                // The connection attempt succeeded. Perform work associated with
-                // the connection in a separate thread.
-                manageMyConnectedSocket(socket)
-            }
-        }
-
-        private fun manageMyConnectedSocket(socket: BluetoothSocket) {
-            service = ConnectedThread(socket)
-            service.run()
-        }
-
-        // Closes the client socket and causes the thread to finish.
-        fun cancel() {
-            try {
-                service.cancel()
-                mmSocket?.close()
-            } catch (e: IOException) {
-                Log.e("My App", "Could not close the client socket", e)
-            }
-        }
-
-        private val TAG = "MY_APP_DEBUG_TAG"
-
-        val MESSAGE_READ: Int = 0
-
-        inner class ConnectedThread(private val mmSocket: BluetoothSocket) : Thread() {
-
-            private val mmInStream: InputStream = mmSocket.inputStream
-            private val mmBuffer: ByteArray = ByteArray(1024) // mmBuffer store for the stream
-
-            override fun run() {
-
-                var numBytes: Int // bytes returned from read()
-
-                // Keep listening to the InputStream until an exception occurs.
-                while (true) {
-                    // Read from the InputStream.
-                    numBytes = try {
-                        mmInStream.read(mmBuffer)
-                    } catch (e: IOException) {
-                        Log.e(TAG, "Input stream was disconnected", e)
-                        break
-                    }
-
-                    val msg: Message = handler.obtainMessage(MESSAGE_READ)
-                    val bundle = Bundle()
-                    bundle.putInt("numBytes" , numBytes)
-                    bundle.putByteArray("ByteArray" , mmBuffer)
-                    msg.data = bundle
-
-                    msg.sendToTarget()
-
-                    var ch = numBytes
-                    var aa = mmBuffer.decodeToString(0 , 1)
-                    Log.d("MYMYA PAP OSJDOIDO" , aa)
-
-                    /*TODO("ToneGenerator and Button Press")*/
-                    runOnUiThread {
-                        if (aa == "0") {
-                            toneGenerator?.startTone(
-                                ToneGenerator.TONE_CDMA_EMERGENCY_RINGBACK,
-                                2000
-                            )
-                        }
-                        else if (aa == "2"){
-
-                            val locate = hashMapOf(
-                                "longitude" to longitude,
-                                "latitude" to latitude
-                            )
-
-                            addMessage(locate)
-                        }
-                    }
-                }
-            }
-                // Call this method from the main activity to shut down the connection.
-            fun cancel() {
+            socket?.let { sock ->
                 try {
-                    mmSocket.close()
+                    runOnUiThread {
+                        Toast.makeText(this@MainActivity, "Connecting...", Toast.LENGTH_SHORT)
+                            .show()
+                    }
+
+                    sock.connect()
+
+                    runOnUiThread {
+                        Toast.makeText(this@MainActivity, "Connected!", Toast.LENGTH_LONG).show()
+                    }
+
+                    connectedThread = ConnectedThread(sock)
+                    connectedThread?.start()
+
                 } catch (e: IOException) {
-                    Log.e(TAG, "Could not close the connect socket", e)
+                    Log.e(TAG, "Connection failed", e)
+                    runOnUiThread {
+                        Toast.makeText(this@MainActivity, "Connection failed", Toast.LENGTH_SHORT)
+                            .show()
+                    }
+                    try {
+                        sock.close()
+                    } catch (closeException: IOException) {
+                        Log.e(TAG, "Could not close socket", closeException)
+                    }
                 }
+            }
+        }
+
+        fun cancel() {
+            connectedThread?.cancel()
+            try {
+                socket?.close()
+            } catch (e: IOException) {
+                Log.e(TAG, "Could not close socket", e)
+            }
+        }
+    }
+
+    // Bluetooth Communication Thread
+    private inner class ConnectedThread(private val socket: BluetoothSocket) : Thread() {
+        private val inputStream = socket.inputStream
+        private val buffer = ByteArray(1024)
+
+        @Volatile
+        private var isRunning = true
+
+        override fun run() {
+            while (isRunning) {
+                try {
+                    val numBytes = inputStream.read(buffer)
+                    if (numBytes > 0) {
+                        val command = buffer.decodeToString(0, 1)
+                        handleCommand(command)
+                    }
+                } catch (e: IOException) {
+                    Log.e(TAG, "Input stream disconnected", e)
+                    break
+                }
+            }
+        }
+
+        private fun handleCommand(command: String) {
+            Log.d(TAG, "Received command: $command")
+
+            runOnUiThread {
+                when (command) {
+                    COMMAND_PLAY_TONE -> {
+                        playTone()
+                    }
+
+                    COMMAND_SEND_LOCATION -> {
+                        sendLocationToFirebase()
+                    }
+
+                    else -> {
+                        Log.w(TAG, "Unknown command: $command")
+                    }
+                }
+            }
+        }
+
+        fun cancel() {
+            isRunning = false
+            try {
+                socket.close()
+            } catch (e: IOException) {
+                Log.e(TAG, "Could not close socket", e)
             }
         }
     }

@@ -37,12 +37,12 @@ class MessagingService : FirebaseMessagingService() {
         val myRef = database.getReference("coord")
 
         myRef.addValueEventListener(object: ValueEventListener {
-
             override fun onDataChange(snapshot: DataSnapshot) {
                 // This method is called once with the initial value and again
                 // whenever data at this location is updated.
                 val value = snapshot.getValue<HashMap<String, Any?>>()
-                Log.d("TAG", "Value is: $value")
+                Log.d("TAG", "" +
+                        " is: $value")
 
                 MessageRecievedFromDB(value?.get("lat") as Double?, value?.get("long") as Double?)
             }
